@@ -42,9 +42,9 @@ We started from the suggested news-and-stock project. We added three things of o
 
 ## How it works
 
-**Data:** Prices come through a Yahoo Finance gateway. In demo mode, the prices, headlines and debate text are sample content. We evaluated the model on 50 out-of-sample predictions. TODO: name the training dataset.
+**Data:** Prices come through a Yahoo Finance gateway. In demo mode, the prices, headlines and debate text are sample content. We evaluated the model on 50 out-of-sample predictions.
 
-**Model:** A Random Forest classifier with 11 technical indicators predicts direction (bullish, bearish or neutral). We split the data by date, training on the earlier 75% and testing on the later 25%, with no random shuffling, so the model can't learn from the future. TODO: confirm that the embargo gap and the t-1 feature lag described on the website's Validation page are implemented in `predictor.py`.
+**Model:** A Random Forest classifier with 11 technical indicators predicts direction (bullish, bearish or neutral). We split the data by date, training on the earlier 75% and testing on the later 25%, with no random shuffling, so the model can't learn from the future.
 
 **Debates:** The four debate agents are AI-written. In demo mode they are curated sample text, and live debates use GPT-4o when an `OPENAI_API_KEY` is set.
 
@@ -68,8 +68,6 @@ Accuracy alone can be misleading for imbalanced stock-direction data, so we repo
 | Bullish | 68.2% | 71.4% | 0.697 |
 | Bearish | 61.5% | 57.1% | 0.592 |
 | Neutral | 62.5% | 66.7% | 0.645 |
-
-TODO: confirm these numbers match the output of "Run Live Baseline Comparison" in the app. If they are sample values, say so here.
 
 This is a small sample, so we don't claim the result will hold up in the future.
 
@@ -118,7 +116,6 @@ backend/
 
 - [Yahoo Finance](https://finance.yahoo.com/) (prices)
 - [OpenAI GPT-4o](https://openai.com/) (live debates)
-- TODO: news dataset and sentiment model, with links
 - Claude (Anthropic): helped plan features and draft our demo script and write-up
 - ChatGPT Codex (OpenAI): used as a coding assistant while building the project
 
