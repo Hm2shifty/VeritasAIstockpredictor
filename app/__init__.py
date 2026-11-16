@@ -1,1 +1,0 @@
-"""FINIQ Streamlit Application Package."""

@@ -1,3 +1,0 @@
-"""
-FINIQ Services Package
-"""
