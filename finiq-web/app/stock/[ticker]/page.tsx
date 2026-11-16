@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import Topbar from '../../components/Topbar';
@@ -17,8 +17,12 @@ import {
   ShieldAlert,
   Sparkles,
   Info,
+  KeyRound,
 } from 'lucide-react';
 
+/* ─────────────────────────────────────────────
+   Types
+───────────────────────────────────────────── */
 interface QuoteDetail {
   symbol: string;
   name: string;
@@ -31,11 +35,12 @@ interface QuoteDetail {
   low: number;
   volume: number;
   avgVolume: number;
-  marketCap: number;
-  peRatio: number;
-  fiftyTwoWeekHigh: number;
-  fiftyTwoWeekLow: number;
+  marketCap: string;
+  pe: number | null;
+  week52High: number;
+  week52Low: number;
   beta: number;
+  dataSource: 'LIVE' | 'DEMO';
 }
 
 interface MLPrediction {
@@ -47,438 +52,454 @@ interface MLPrediction {
   factors: Array<{ factor: string; impact: 'positive' | 'negative' | 'neutral'; weight: string }>;
 }
 
-const KNOWN_PROFILES: Record<string, Partial<QuoteDetail>> = {
-  NVDA: { name: 'NVIDIA Corporation', sector: 'Semiconductors & AI', price: 145.89, change: 4.82, changePercent: 3.42, peRatio: 46.8, marketCap: 3580000000000, beta: 1.68, fiftyTwoWeekHigh: 149.76, fiftyTwoWeekLow: 45.12 },
-  AAPL: { name: 'Apple Inc.', sector: 'Consumer Electronics & Services', price: 228.24, change: 1.15, changePercent: 0.51, peRatio: 33.4, marketCap: 3460000000000, beta: 1.05, fiftyTwoWeekHigh: 237.23, fiftyTwoWeekLow: 164.08 },
-  MSFT: { name: 'Microsoft Corporation', sector: 'Enterprise Software & Cloud', price: 422.90, change: 3.65, changePercent: 0.87, peRatio: 35.2, marketCap: 3140000000000, beta: 1.18, fiftyTwoWeekHigh: 468.35, fiftyTwoWeekLow: 366.50 },
-  TSLA: { name: 'Tesla, Inc.', sector: 'Automotive & Clean Energy', price: 342.10, change: -4.30, changePercent: -1.24, peRatio: 92.1, marketCap: 1090000000000, beta: 2.34, fiftyTwoWeekHigh: 358.64, fiftyTwoWeekLow: 138.80 },
-  GOOGL: { name: 'Alphabet Inc.', sector: 'Internet & Search AI', price: 178.35, change: 2.10, changePercent: 1.19, peRatio: 23.5, marketCap: 2210000000000, beta: 1.08, fiftyTwoWeekHigh: 191.75, fiftyTwoWeekLow: 129.40 },
-  PLTR: { name: 'Palantir Technologies', sector: 'Enterprise AI & Defense', price: 62.40, change: 4.12, changePercent: 7.07, peRatio: 115.0, marketCap: 138000000000, beta: 2.10, fiftyTwoWeekHigh: 65.20, fiftyTwoWeekLow: 19.80 },
-  AMD: { name: 'Advanced Micro Devices', sector: 'Semiconductors', price: 142.15, change: 4.35, changePercent: 3.16, peRatio: 48.2, marketCap: 230000000000, beta: 1.72, fiftyTwoWeekHigh: 227.30, fiftyTwoWeekLow: 131.20 },
+/* ─────────────────────────────────────────────
+   AAPL-first demo profiles — rich & accurate
+───────────────────────────────────────────── */
+const DEMO_PROFILES: Record<string, QuoteDetail> = {
+  AAPL: {
+    symbol: 'AAPL', name: 'Apple Inc.', sector: 'Consumer Electronics & Services',
+    price: 228.52, change: 2.14, changePercent: 0.94,
+    open: 226.80, high: 229.75, low: 225.90,
+    volume: 52_400_000, avgVolume: 58_200_000,
+    marketCap: '3.51T', pe: 34.2, week52High: 237.23, week52Low: 164.08, beta: 1.05,
+    dataSource: 'DEMO',
+  },
+  NVDA: {
+    symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductors & AI',
+    price: 145.89, change: 4.82, changePercent: 3.42,
+    open: 141.50, high: 147.20, low: 140.80,
+    volume: 54_200_000, avgVolume: 60_100_000,
+    marketCap: '3.58T', pe: 46.8, week52High: 149.76, week52Low: 45.12, beta: 1.68,
+    dataSource: 'DEMO',
+  },
+  MSFT: {
+    symbol: 'MSFT', name: 'Microsoft Corporation', sector: 'Enterprise Software & Cloud',
+    price: 422.90, change: 3.65, changePercent: 0.87,
+    open: 420.10, high: 425.80, low: 419.40,
+    volume: 22_400_000, avgVolume: 24_800_000,
+    marketCap: '3.14T', pe: 35.2, week52High: 468.35, week52Low: 366.50, beta: 1.18,
+    dataSource: 'DEMO',
+  },
+  TSLA: {
+    symbol: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotive & Clean Energy',
+    price: 342.10, change: -4.30, changePercent: -1.24,
+    open: 346.80, high: 348.20, low: 339.90,
+    volume: 68_100_000, avgVolume: 72_400_000,
+    marketCap: '1.09T', pe: 92.1, week52High: 358.64, week52Low: 138.80, beta: 2.34,
+    dataSource: 'DEMO',
+  },
+  GOOGL: {
+    symbol: 'GOOGL', name: 'Alphabet Inc.', sector: 'Internet & Search AI',
+    price: 178.35, change: 2.10, changePercent: 1.19,
+    open: 176.80, high: 179.50, low: 176.10,
+    volume: 28_500_000, avgVolume: 31_200_000,
+    marketCap: '2.21T', pe: 23.5, week52High: 191.75, week52Low: 129.40, beta: 1.08,
+    dataSource: 'DEMO',
+  },
+  PLTR: {
+    symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Enterprise AI & Defense',
+    price: 62.40, change: 4.12, changePercent: 7.07,
+    open: 59.20, high: 63.80, low: 58.90,
+    volume: 72_100_000, avgVolume: 68_400_000,
+    marketCap: '138.00B', pe: 115.0, week52High: 65.20, week52Low: 19.80, beta: 2.10,
+    dataSource: 'DEMO',
+  },
+  AMD: {
+    symbol: 'AMD', name: 'Advanced Micro Devices', sector: 'Semiconductors',
+    price: 142.15, change: 4.35, changePercent: 3.16,
+    open: 138.90, high: 143.50, low: 138.20,
+    volume: 38_900_000, avgVolume: 42_100_000,
+    marketCap: '230.00B', pe: 48.2, week52High: 227.30, week52Low: 131.20, beta: 1.72,
+    dataSource: 'DEMO',
+  },
 };
 
-function generateFallbackCandles(basePrice: number, count: number = 30): StockCandle[] {
+const DEFAULT_PROFILE = DEMO_PROFILES['AAPL'];
+
+/* ─────────────────────────────────────────────
+   AAPL-first ML predictions
+───────────────────────────────────────────── */
+const DEMO_PREDICTIONS: Record<string, MLPrediction> = {
+  AAPL: {
+    direction: 'BULLISH', confidence: 78,
+    horizon: '5-Day Forward Alpha', expectedReturn: '+2.8% to +4.6%',
+    modelName: 'Temporal Walk-Forward Ensemble (GBDT + LSTM)',
+    factors: [
+      { factor: 'Apple Intelligence upgrade cycle driving record iPhone 16 Pro ASP and high-margin Services revenue expansion (+14% YoY).', impact: 'positive', weight: '32%' },
+      { factor: 'Institutional accumulation: Options flow shows net call premium above 90th percentile, signaling smart-money positioning.', impact: 'positive', weight: '28%' },
+      { factor: 'Momentum Regime: 14D RSI at 56.8 — continuation bias with no overbought exhaustion signal.', impact: 'positive', weight: '24%' },
+      { factor: 'Treasury yield sensitivity remains a macro headwind for high-multiple consumer tech names.', impact: 'neutral', weight: '16%' },
+    ],
+  },
+  NVDA: {
+    direction: 'BULLISH', confidence: 82,
+    horizon: '5-Day Forward Alpha', expectedReturn: '+3.4% to +5.8%',
+    modelName: 'Temporal Walk-Forward Ensemble (GBDT + LSTM)',
+    factors: [
+      { factor: 'Blackwell GB200 volume ramp entering hyperscaler deployment phase with multi-quarter pre-order backlog.', impact: 'positive', weight: '38%' },
+      { factor: 'CUDA software moat provides insurmountable switching costs for enterprise AI workloads.', impact: 'positive', weight: '28%' },
+      { factor: 'Momentum Regime: 14D RSI at 61.2 confirms continuation with no overbought signal.', impact: 'positive', weight: '20%' },
+      { factor: 'Semiconductor beta sensitivity to U.S.-China export restriction headwinds.', impact: 'neutral', weight: '14%' },
+    ],
+  },
+};
+
+const DEFAULT_PREDICTION: MLPrediction = DEMO_PREDICTIONS['AAPL'];
+
+/* ─────────────────────────────────────────────
+   Chart fallback generator
+───────────────────────────────────────────── */
+function generateCandles(basePrice: number, count = 30): StockCandle[] {
   const candles: StockCandle[] = [];
   let current = basePrice * 0.92;
   const now = new Date();
-
   for (let i = count - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dayStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
+    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const delta = (Math.random() - 0.47) * (basePrice * 0.025);
     const close = Math.max(1, +(current + delta).toFixed(2));
-    const open = Math.max(1, +(close - (Math.random() - 0.5) * (basePrice * 0.015)).toFixed(2));
-    const high = +(Math.max(open, close) + Math.random() * (basePrice * 0.012)).toFixed(2);
-    const low = +(Math.min(open, close) - Math.random() * (basePrice * 0.012)).toFixed(2);
-    const volume = Math.floor(20000000 + Math.random() * 40000000);
-
-    candles.push({ date: dayStr, open, high, low, close, volume });
+    const open  = Math.max(1, +(close - (Math.random() - 0.5) * basePrice * 0.015).toFixed(2));
+    const high  = +(Math.max(open, close) + Math.random() * basePrice * 0.012).toFixed(2);
+    const low   = +(Math.min(open, close) - Math.random() * basePrice * 0.012).toFixed(2);
+    const volume = Math.floor(20_000_000 + Math.random() * 40_000_000);
+    candles.push({ date: label, open, high, low, close, volume });
     current = close;
   }
-  // Ensure last candle matches base price
-  if (candles.length > 0) {
-    candles[candles.length - 1].close = basePrice;
-  }
+  if (candles.length) candles[candles.length - 1].close = basePrice;
   return candles;
 }
 
+/* ─────────────────────────────────────────────
+   Page component
+───────────────────────────────────────────── */
 export default function StockDetailPage() {
   const params = useParams();
-  const rawTicker = (params?.ticker as string) || 'NVDA';
+  const rawTicker = (params?.ticker as string) || 'AAPL';
   const ticker = rawTicker.toUpperCase();
 
   const [period, setPeriod] = useState('1M');
   const [loadingChart, setLoadingChart] = useState(false);
   const [candles, setCandles] = useState<StockCandle[]>([]);
+  const [quote, setQuote] = useState<QuoteDetail>(
+    () => DEMO_PROFILES[ticker] || { ...DEFAULT_PROFILE, symbol: ticker, name: `${ticker} Inc.` }
+  );
+  const [prediction, setPrediction] = useState<MLPrediction>(
+    () => DEMO_PREDICTIONS[ticker] || DEFAULT_PREDICTION
+  );
 
-  // Quote detail state
-  const baseProfile = KNOWN_PROFILES[ticker] || {};
-  const [quote, setQuote] = useState<QuoteDetail>({
-    symbol: ticker,
-    name: baseProfile.name || `${ticker} Corporation`,
-    price: baseProfile.price || 150.0,
-    change: baseProfile.change ?? 2.5,
-    changePercent: baseProfile.changePercent ?? 1.68,
-    sector: baseProfile.sector || 'Technology',
-    open: (baseProfile.price || 150) * 0.99,
-    high: (baseProfile.price || 150) * 1.02,
-    low: (baseProfile.price || 150) * 0.985,
-    volume: 48200000,
-    avgVolume: 52000000,
-    marketCap: baseProfile.marketCap || 500000000000,
-    peRatio: baseProfile.peRatio || 32.5,
-    fiftyTwoWeekHigh: baseProfile.fiftyTwoWeekHigh || (baseProfile.price || 150) * 1.25,
-    fiftyTwoWeekLow: baseProfile.fiftyTwoWeekLow || (baseProfile.price || 150) * 0.65,
-    beta: baseProfile.beta || 1.25,
-  });
-
-  // ML Prediction state
-  const [prediction, setPrediction] = useState<MLPrediction>({
-    direction: 'BULLISH',
-    confidence: 76,
-    horizon: '5-Day Forward Alpha',
-    expectedReturn: '+3.4% to +5.8%',
-    modelName: 'Temporal Walk-Forward Ensemble (GBDT + LSTM)',
-    factors: [
-      { factor: 'Accumulation/Distribution: Institutional flow ratio +24% vs 20D baseline', impact: 'positive', weight: '34%' },
-      { factor: 'Volatility Compression: Bollinger Band width at 18-month low, favoring upside breakout', impact: 'positive', weight: '26%' },
-      { factor: 'Momentum Regime: 14D RSI at 58.4 confirms continuation with zero overbought exhaustion', impact: 'positive', weight: '22%' },
-      { factor: 'Macro Factor: Semiconductor beta sensitivity to Treasury yield shifts', impact: 'neutral', weight: '18%' },
-    ],
-  });
-
-  // Fetch Quote data
+  /* Live quote fetch — gracefully falls back to demo */
   useEffect(() => {
+    setQuote(DEMO_PROFILES[ticker] || { ...DEFAULT_PROFILE, symbol: ticker, name: `${ticker} Inc.` });
+    setPrediction(DEMO_PREDICTIONS[ticker] || DEFAULT_PREDICTION);
+
     async function fetchQuote() {
       try {
         const res = await fetch(`/api/quote/${ticker}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.price) {
-            setQuote((prev) => ({
-              ...prev,
-              ...data,
-              symbol: ticker,
-            }));
-          }
-        }
-      } catch {
-        // Fallback default retained
-      }
+        if (!res.ok) return;
+        const d = await res.json();
+        if (!d?.price) return;
+        setQuote({
+          symbol:        d.symbol   || d.ticker       || ticker,
+          name:          d.name     || d.company      || `${ticker} Inc.`,
+          price:         Number(d.price)               || 0,
+          change:        Number(d.change)              || 0,
+          changePercent: Number(d.changePercent ?? d.changePct) || 0,
+          sector:        d.sector                      || 'Technology',
+          open:          Number(d.open)                || 0,
+          high:          Number(d.high)                || 0,
+          low:           Number(d.low)                 || 0,
+          volume:        Number(d.volume)              || 0,
+          avgVolume:     Number(d.avgVolume)           || 0,
+          marketCap:     typeof d.marketCap === 'string' ? d.marketCap : `${((Number(d.marketCap) || 0) / 1e12).toFixed(2)}T`,
+          pe:            d.pe != null ? Number(d.pe) : null,
+          week52High:    Number(d.week52High  ?? d.fiftyTwoWeekHigh)  || 0,
+          week52Low:     Number(d.week52Low   ?? d.fiftyTwoWeekLow)   || 0,
+          beta:          Number(d.beta)                || 1.0,
+          dataSource:    d.dataSource === 'LIVE' ? 'LIVE' : 'DEMO',
+        });
+      } catch { /* keep demo */ }
     }
     fetchQuote();
   }, [ticker]);
 
-  // Fetch History Candlesticks
-  const fetchHistory = useCallback(async (selectedPeriod: string) => {
+  /* Chart history */
+  const fetchHistory = useCallback(async (p: string) => {
+    setLoadingChart(true);
     try {
-      setLoadingChart(true);
-      const res = await fetch(`/api/history/${ticker}?period=${selectedPeriod}`);
+      const res = await fetch(`/api/history/${ticker}?period=${p}`);
       if (res.ok) {
-        const data = await res.json();
-        const items = Array.isArray(data) ? data : data.candles || data.data;
+        const d = await res.json();
+        const items = Array.isArray(d) ? d : d.candles || d.data;
         if (Array.isArray(items) && items.length > 0) {
           setCandles(items);
           return;
         }
       }
-      // If endpoint not ready or empty, use fallback candles
-      const count = selectedPeriod === '1D' ? 12 : selectedPeriod === '5D' ? 20 : selectedPeriod === '1Y' ? 60 : 35;
-      setCandles(generateFallbackCandles(quote.price, count));
-    } catch {
-      setCandles(generateFallbackCandles(quote.price, 35));
-    } finally {
-      setLoadingChart(false);
-    }
+    } catch { /* fall through */ }
+    const count = p === '1D' ? 12 : p === '5D' ? 20 : p === '1Y' ? 60 : 35;
+    setCandles(generateCandles(quote.price || 228, count));
+    setLoadingChart(false);
   }, [ticker, quote.price]);
 
   useEffect(() => {
+    setLoadingChart(false);
+    setCandles(generateCandles(quote.price || 228, 35));
     fetchHistory(period);
-  }, [fetchHistory, period]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, period]);
 
-  // Fetch ML Prediction
+  /* ML prediction fetch */
   useEffect(() => {
     async function fetchPredict() {
       try {
         const res = await fetch(`/api/predict/${ticker}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.direction) {
-            setPrediction(data);
-          }
-        }
-      } catch {
-        // Fallback prediction retained
-      }
+        if (!res.ok) return;
+        const d = await res.json();
+        if (d?.direction) setPrediction(d);
+      } catch { /* keep demo */ }
     }
     fetchPredict();
   }, [ticker]);
 
   const isUp = quote.change >= 0;
 
+  /* Technical indicators derived from price */
+  const rsi   = 56.8;
+  const ema20 = +(quote.price * 0.981).toFixed(2);
+  const sma50 = +(quote.price * 0.942).toFixed(2);
+  const sma200 = +(quote.price * 0.856).toFixed(2);
+  const bbLow  = +(quote.price * 0.961).toFixed(0);
+  const bbHigh = +(quote.price * 1.039).toFixed(0);
+
   return (
     <div className="app-shell">
       <Sidebar />
       <div className="main-content">
         <Topbar
-          title={`${quote.symbol} • ${quote.name}`}
-          subtitle={`Equity Analysis & Algorithmic Consensus`}
+          title={`${quote.symbol} \u2022 ${quote.name}`}
+          subtitle="Equity Analysis & Algorithmic Consensus"
         />
 
         <main className="page-container">
-          {/* Hero Section */}
+
+          {/* ── API Key Notice Banner ── */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+              background: 'rgba(212,160,23,0.05)',
+              border: '1px solid rgba(212,160,23,0.22)',
+              borderRadius: '6px',
+              padding: '11px 16px',
+              marginBottom: '18px',
+              fontSize: '12px',
+              color: 'var(--text-1)',
+            }}
+          >
+            <KeyRound size={15} color="var(--warning)" style={{ flexShrink: 0, marginTop: '1px' }} />
+            <div>
+              <strong style={{ color: 'var(--warning)' }}>
+                {quote.dataSource === 'LIVE' ? '● Live Data Active' : 'Demo Mode — Static Prices'}
+              </strong>
+              {quote.dataSource !== 'LIVE' && (
+                <>
+                  {' '}— Real-time prices stream automatically via Yahoo Finance.{' '}
+                  For <strong>live AI predictions</strong>, add{' '}
+                  <code style={{ background: 'var(--bg-2)', padding: '1px 6px', borderRadius: '3px', fontFamily: 'var(--mono)', fontSize: '11px' }}>
+                    OPENAI_API_KEY=sk-...
+                  </code>{' '}
+                  to your <code style={{ background: 'var(--bg-2)', padding: '1px 6px', borderRadius: '3px', fontFamily: 'var(--mono)', fontSize: '11px' }}>.env.local</code>{' '}
+                  or <strong>Vercel › Settings › Environment Variables</strong>.
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ── Hero Card ── */}
           <div
             className="card card-accent"
-            style={{
-              marginBottom: '24px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '16px',
-            }}
+            style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                <span className="ticker-tag" style={{ fontSize: '18px', padding: '4px 12px' }}>
-                  {quote.symbol}
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span className="ticker-tag" style={{ fontSize: '17px', padding: '4px 12px' }}>{quote.symbol}</span>
                 <span className="badge badge-purple">{quote.sector}</span>
-                <span className="badge badge-blue">NASDAQ / NYSE Listed</span>
+                <span className={`badge ${quote.dataSource === 'LIVE' ? 'badge-green' : 'badge-gray'}`}>
+                  {quote.dataSource === 'LIVE' ? '● Live' : 'Demo'}
+                </span>
               </div>
-
-              <h2 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-0)', margin: '4px 0' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-0)', margin: '0 0 8px' }}>
                 {quote.name}
               </h2>
-
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginTop: '6px' }}>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: '32px', fontWeight: 800, color: 'var(--text-0)' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: '30px', fontWeight: 800, color: 'var(--text-0)' }}>
                   ${quote.price.toFixed(2)}
                 </span>
-                <span
-                  className={`badge ${isUp ? 'badge-green' : 'badge-red'}`}
-                  style={{ fontSize: '14px', padding: '4px 12px', fontFamily: 'var(--mono)' }}
-                >
-                  {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                  {isUp ? '+' : ''}
-                  {quote.change.toFixed(2)} ({isUp ? '+' : ''}
-                  {quote.changePercent.toFixed(2)}%)
+                <span className={`badge ${isUp ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '13px', padding: '4px 12px', fontFamily: 'var(--mono)' }}>
+                  {isUp ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                  {isUp ? '+' : ''}{quote.change.toFixed(2)} ({isUp ? '+' : ''}{quote.changePercent.toFixed(2)}%)
                 </span>
-                <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>Real-time institutional feed</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>Today's Session</span>
               </div>
             </div>
 
-            {/* Quick Actions */}
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <Link href={`/debate/${quote.symbol}`} className="btn btn-primary btn-lg">
-                <Cpu size={16} /> Open AI Debate Room
+                <Cpu size={15} /> Open AI Debate
               </Link>
               <Link href="/performance" className="btn btn-secondary btn-lg">
-                <BarChart3 size={16} /> Model Validation
+                <BarChart3 size={15} /> Model Validation
               </Link>
             </div>
           </div>
 
-          {/* Main Content Grid: Chart + Key Stats Panel */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)',
-              gap: '20px',
-              marginBottom: '24px',
-            }}
-          >
-            {/* Left: Interactive Stock Chart */}
-            <div>
-              <StockChart
-                ticker={quote.symbol}
-                data={candles}
-                period={period}
-                onPeriodChange={(newP) => setPeriod(newP)}
-                loading={loadingChart}
-                height={380}
-              />
-            </div>
+          {/* ── Chart + Stats Grid ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(260px, 1fr)', gap: '18px', marginBottom: '20px' }}>
 
-            {/* Right: Key Stats Card */}
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div>
-                <div className="section-title" style={{ marginBottom: '16px' }}>
-                  <Layers size={15} color="var(--accent)" />
-                  <span>Key Financial Statistics</span>
-                </div>
+            {/* Chart */}
+            <StockChart
+              ticker={quote.symbol}
+              data={candles}
+              period={period}
+              onPeriodChange={(p) => setPeriod(p)}
+              loading={loadingChart}
+              height={360}
+            />
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-2)', fontSize: '12px' }}>Day Range</span>
-                    <span className="text-mono" style={{ color: 'var(--text-0)', fontSize: '12px', fontWeight: 600 }}>
-                      ${quote.low.toFixed(2)} - ${quote.high.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-2)', fontSize: '12px' }}>Previous Open</span>
-                    <span className="text-mono" style={{ color: 'var(--text-0)', fontSize: '12px', fontWeight: 600 }}>
-                      ${quote.open.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-2)', fontSize: '12px' }}>Volume (Shares)</span>
-                    <span className="text-mono" style={{ color: 'var(--text-0)', fontSize: '12px', fontWeight: 600 }}>
-                      {(quote.volume / 1e6).toFixed(2)}M
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-2)', fontSize: '12px' }}>Market Capitalization</span>
-                    <span className="text-mono" style={{ color: 'var(--text-0)', fontSize: '12px', fontWeight: 600 }}>
-                      ${(quote.marketCap / 1e12).toFixed(2)}T
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-2)', fontSize: '12px' }}>P/E Ratio (TTM)</span>
-                    <span className="text-mono" style={{ color: 'var(--text-0)', fontSize: '12px', fontWeight: 600 }}>
-                      {quote.peRatio.toFixed(1)}x
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
-                    <span style={{ color: 'var(--text-2)', fontSize: '12px' }}>52-Week Range</span>
-                    <span className="text-mono" style={{ color: 'var(--text-0)', fontSize: '12px', fontWeight: 600 }}>
-                      ${quote.fiftyTwoWeekLow.toFixed(2)} - ${quote.fiftyTwoWeekHigh.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '4px' }}>
-                    <span style={{ color: 'var(--text-2)', fontSize: '12px' }}>Beta (5Y Monthly)</span>
-                    <span className="text-mono" style={{ color: 'var(--text-0)', fontSize: '12px', fontWeight: 600 }}>
-                      {quote.beta.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
+            {/* Key Stats */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="section-title">
+                <Layers size={14} />
+                <span>Key Statistics</span>
               </div>
 
-              <div
-                style={{
-                  marginTop: '16px',
-                  background: 'var(--bg-1)',
-                  borderRadius: '6px',
-                  padding: '10px 12px',
-                  fontSize: '11px',
-                  color: 'var(--text-3)',
-                }}
-              >
-                Institutional pricing sourced via Yahoo Finance gateway.
+              {[
+                { label: 'Open',              value: `$${quote.open.toFixed(2)}` },
+                { label: 'Day Range',         value: `$${quote.low.toFixed(2)} – $${quote.high.toFixed(2)}` },
+                { label: 'Volume',            value: `${(quote.volume / 1e6).toFixed(1)}M` },
+                { label: 'Avg Volume (3M)',   value: `${(quote.avgVolume / 1e6).toFixed(1)}M` },
+                { label: 'Market Cap',        value: quote.marketCap || 'N/A' },
+                { label: 'P/E (TTM)',         value: quote.pe != null ? `${Number(quote.pe).toFixed(1)}x` : 'N/A' },
+                { label: '52-Week High',      value: `$${quote.week52High.toFixed(2)}` },
+                { label: '52-Week Low',       value: `$${quote.week52Low.toFixed(2)}` },
+                { label: 'Beta (5Y Monthly)', value: quote.beta.toFixed(2) },
+              ].map(({ label, value }) => (
+                <div key={label} className="data-row">
+                  <span className="data-row-label">{label}</span>
+                  <span className="data-row-value">{value}</span>
+                </div>
+              ))}
+
+              <div style={{ marginTop: 'auto', paddingTop: '14px', fontSize: '10px', color: 'var(--text-3)', lineHeight: 1.5 }}>
+                Data sourced via Yahoo Finance gateway. Prices delayed ≤15 min.
               </div>
             </div>
           </div>
 
-          {/* ML Prediction Card & Technical Signals Grid */}
-          <div className="grid-2" style={{ marginBottom: '24px' }}>
-            {/* Left: ML Prediction Card */}
-            <div className="card card-glow">
+          {/* ── ML Prediction + Technical Indicators ── */}
+          <div className="grid-2" style={{ marginBottom: '20px' }}>
+
+            {/* ML Prediction */}
+            <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <div className="section-title" style={{ margin: 0 }}>
-                  <Sparkles size={16} color="var(--accent)" />
-                  <span>FINIQ Machine Learning Prediction</span>
+                  <Sparkles size={14} />
+                  <span>FINIQ ML Prediction</span>
                 </div>
-                <span className="badge badge-purple" style={{ fontSize: '11px' }}>
-                  {prediction.horizon}
-                </span>
+                <span className="badge badge-purple" style={{ fontSize: '10px' }}>{prediction.horizon}</span>
               </div>
 
+              {/* Signal summary */}
               <div
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
                   justifyContent: 'space-between',
+                  alignItems: 'center',
                   background: 'var(--bg-1)',
-                  padding: '14px 18px',
-                  borderRadius: '8px',
-                  marginBottom: '16px',
                   border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  padding: '14px 18px',
+                  marginBottom: '14px',
                 }}
               >
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
                     Consensus Signal
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span
-                      className={`badge ${
-                        prediction.direction === 'BULLISH'
-                          ? 'badge-green'
-                          : prediction.direction === 'BEARISH'
-                          ? 'badge-red'
-                          : 'badge-blue'
-                      }`}
-                      style={{ fontSize: '14px', padding: '4px 14px' }}
+                      className={`badge ${prediction.direction === 'BULLISH' ? 'badge-green' : prediction.direction === 'BEARISH' ? 'badge-red' : 'badge-blue'}`}
+                      style={{ fontSize: '13px', padding: '4px 14px' }}
                     >
                       {prediction.direction}
                     </span>
-                    <span style={{ fontSize: '12px', color: 'var(--text-1)', fontFamily: 'var(--mono)' }}>
-                      Alpha Target: {prediction.expectedReturn}
+                    <span style={{ fontSize: '12px', color: 'var(--text-2)', fontFamily: 'var(--mono)' }}>
+                      {prediction.expectedReturn}
                     </span>
                   </div>
                 </div>
-
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Ensemble Confidence
-                  </div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: '24px', fontWeight: 800, color: 'var(--text-0)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>Confidence</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: '26px', fontWeight: 800, color: 'var(--text-0)' }}>
                     {prediction.confidence}%
                   </div>
                 </div>
               </div>
 
-              {/* Confidence Progress Bar */}
-              <div style={{ marginBottom: '18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-3)', marginBottom: '4px' }}>
+              {/* Bar */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-3)', marginBottom: '5px' }}>
                   <span>Probability Mass Distribution</span>
                   <span>{prediction.confidence}% Positive Expectancy</span>
                 </div>
-                <div className="bar-track">
+                <div className="bar-track" style={{ height: '5px' }}>
                   <div
                     className="bar-fill"
                     style={{
                       width: `${prediction.confidence}%`,
-                      background:
-                        prediction.direction === 'BULLISH'
-                          ? 'linear-gradient(90deg, #3984F4, #0ECB81)'
-                          : 'linear-gradient(90deg, #3984F4, #F6465D)',
+                      background: prediction.direction === 'BULLISH'
+                        ? 'linear-gradient(90deg, var(--positive), rgba(57,209,116,0.6))'
+                        : 'linear-gradient(90deg, var(--negative), rgba(229,83,83,0.6))',
                     }}
                   />
                 </div>
               </div>
 
-              {/* Key Factor Contributions */}
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                  Top Contributing Algorithmic Factors
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {prediction.factors.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '12px',
-                        fontSize: '12px',
-                        background: 'rgba(26,39,64,0.3)',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        borderLeft: `3px solid ${
-                          item.impact === 'positive'
-                            ? 'var(--positive)'
-                            : item.impact === 'negative'
-                            ? 'var(--negative)'
-                            : 'var(--accent)'
-                        }`,
-                      }}
-                    >
-                      <span style={{ color: 'var(--text-1)' }}>{item.factor}</span>
-                      <span className="text-mono" style={{ color: 'var(--text-2)', fontSize: '11px', flexShrink: 0 }}>
-                        {item.weight}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              {/* Factors */}
+              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
+                Top Algorithmic Factors
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                {prediction.factors.map((f, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: '10px',
+                      background: 'var(--bg-1)',
+                      borderLeft: `3px solid ${f.impact === 'positive' ? 'var(--positive)' : f.impact === 'negative' ? 'var(--negative)' : 'var(--border-focus)'}`,
+                      padding: '8px 12px',
+                      borderRadius: '0 5px 5px 0',
+                      fontSize: '11px',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-1)', lineHeight: 1.5 }}>{f.factor}</span>
+                    <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-3)', fontSize: '10px', flexShrink: 0 }}>{f.weight}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Right: Technical Summary Table */}
+            {/* Technical Indicators */}
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <div className="section-title" style={{ margin: 0 }}>
-                  <Activity size={16} color="var(--positive)" />
-                  <span>Technical Indicators & Oscillators</span>
+                  <Activity size={14} />
+                  <span>Technical Indicators</span>
                 </div>
                 <span className="badge badge-gray">Daily Timeframe</span>
               </div>
@@ -488,99 +509,118 @@ export default function StockDetailPage() {
                   <tr>
                     <th>Indicator</th>
                     <th>Value</th>
-                    <th>Interpretation</th>
-                    <th>Action</th>
+                    <th>Signal</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td>RSI (14)</td>
-                    <td className="mono">58.42</td>
-                    <td>Neutral Momentum</td>
+                    <td className="mono">{rsi}</td>
                     <td><span className="badge badge-green">Accumulate</span></td>
                   </tr>
                   <tr>
-                    <td>MACD (12, 26, 9)</td>
-                    <td className="mono">+2.18</td>
-                    <td>Bullish Signal Line Cross</td>
+                    <td>MACD (12,26,9)</td>
+                    <td className="mono">+1.84</td>
                     <td><span className="badge badge-green">Buy</span></td>
                   </tr>
                   <tr>
                     <td>20-Day EMA</td>
-                    <td className="mono">${(quote.price * 0.98).toFixed(2)}</td>
-                    <td>Price Above Fast Trend</td>
-                    <td><span className="badge badge-blue">Bullish</span></td>
+                    <td className="mono">${ema20}</td>
+                    <td><span className="badge badge-blue">Above EMA</span></td>
                   </tr>
                   <tr>
                     <td>50-Day SMA</td>
-                    <td className="mono">${(quote.price * 0.94).toFixed(2)}</td>
-                    <td>Primary Structural Support</td>
-                    <td><span className="badge badge-blue">Hold / Bullish</span></td>
+                    <td className="mono">${sma50}</td>
+                    <td><span className="badge badge-blue">Bull Trend</span></td>
                   </tr>
                   <tr>
                     <td>200-Day SMA</td>
-                    <td className="mono">${(quote.price * 0.85).toFixed(2)}</td>
-                    <td>Long-Term Trend Baseline</td>
-                    <td><span className="badge badge-green">Strong Bullish</span></td>
+                    <td className="mono">${sma200}</td>
+                    <td><span className="badge badge-green">Strong Bull</span></td>
                   </tr>
                   <tr>
-                    <td>Bollinger Bands (20,2)</td>
-                    <td className="mono">${(quote.price * 0.96).toFixed(0)} - ${(quote.price * 1.04).toFixed(0)}</td>
-                    <td>Vol Band Expansion</td>
+                    <td>Bollinger (20,2)</td>
+                    <td className="mono">${bbLow}–${bbHigh}</td>
                     <td><span className="badge badge-amber">Watch Break</span></td>
                   </tr>
                 </tbody>
               </table>
 
-              {/* AI Debate Callout */}
+              {/* Debate callout */}
               <div
                 style={{
                   marginTop: '16px',
                   padding: '12px 16px',
-                  background: 'linear-gradient(135deg, rgba(57,132,244,0.1), rgba(124,93,250,0.1))',
-                  border: '1px solid rgba(57,132,244,0.25)',
+                  background: 'var(--bg-1)',
+                  border: '1px solid var(--border-light)',
                   borderRadius: '8px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  gap: '12px',
                 }}
               >
                 <div>
                   <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-0)' }}>
-                    Want multi-perspective thesis analysis?
+                    Multi-perspective thesis analysis
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-2)' }}>
-                    Hear 4 specialized agents debate {quote.symbol} bull and bear scenarios.
+                  <div style={{ fontSize: '11px', color: 'var(--text-2)', marginTop: '2px' }}>
+                    4 AI agents debate {quote.symbol} bull & bear scenarios.
                   </div>
                 </div>
                 <Link href={`/debate/${quote.symbol}`} className="btn btn-primary btn-sm">
-                  Start Debate <ArrowUpRight size={13} />
+                  Debate <ArrowUpRight size={12} />
                 </Link>
               </div>
             </div>
           </div>
 
-          {/* Institutional Disclaimer */}
+          {/* ── Quick Ticker Strip ── */}
+          <div className="card" style={{ marginBottom: '20px' }}>
+            <div className="section-title">
+              <Info size={13} />
+              <span>Browse Other Stocks</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {Object.keys(DEMO_PROFILES).map((t) => (
+                <Link
+                  key={t}
+                  href={`/stock/${t}`}
+                  className="ticker-tag"
+                  style={{
+                    fontSize: '12px',
+                    padding: '4px 10px',
+                    background: t === ticker ? 'var(--accent)' : 'var(--bg-2)',
+                    color: t === ticker ? '#080808' : 'var(--text-0)',
+                    fontWeight: t === ticker ? 800 : 700,
+                    borderColor: t === ticker ? 'var(--accent)' : 'var(--border-light)',
+                  }}
+                >
+                  {t}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
           <footer
             style={{
-              padding: '24px 0',
+              paddingTop: '20px',
               borderTop: '1px solid var(--border)',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              gap: '6px',
+              justifyContent: 'center',
+              gap: '8px',
               color: 'var(--text-3)',
-              fontSize: '12px',
+              fontSize: '11px',
               textAlign: 'center',
+              paddingBottom: '8px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ShieldAlert size={14} color="var(--warning)" />
-              <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>FINIQ Equity Terminal</span>
-            </div>
-            <p style={{ margin: 0, maxWidth: '700px' }}>
-              This project is a prototype and is not financial advice. Past performance and machine learning indicators do not guarantee future equity market returns.
-            </p>
+            <ShieldAlert size={13} color="var(--warning)" />
+            <span>
+              FINIQ is a prototype and is not financial advice. ML indicators do not guarantee future returns.
+            </span>
           </footer>
         </main>
       </div>

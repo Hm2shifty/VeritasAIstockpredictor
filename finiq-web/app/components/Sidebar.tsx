@@ -25,7 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
   { name: 'Market', href: '/market', icon: BarChart3, exact: false, matchPrefix: '/market' },
   { name: 'Stocks', href: '/stock/AAPL', icon: TrendingUp, exact: false, matchPrefix: '/stock' },
-  { name: 'AI Debate', href: '/debate/NVDA', icon: Cpu, exact: false, matchPrefix: '/debate' },
+  { name: 'AI Debate', href: '/debate/AAPL', icon: Cpu, exact: false, matchPrefix: '/debate' },
   { name: 'News', href: '/news', icon: Newspaper, exact: false, matchPrefix: '/news' },
   { name: 'Performance', href: '/performance', icon: Target, exact: false, matchPrefix: '/performance' },
 ];
