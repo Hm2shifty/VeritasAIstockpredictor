@@ -3,11 +3,6 @@
   "buildCommand": "npm --prefix finiq-web ci && npm --prefix finiq-web run build",
   "outputDirectory": "finiq-web/.next",
   "installCommand": "npm --prefix finiq-web install",
-  "functions": {
-    "finiq-web/app/api/**/*.ts": {
-      "maxDuration": 30
-    }
-  },
   "headers": [
     {
       "source": "/api/(.*)",
