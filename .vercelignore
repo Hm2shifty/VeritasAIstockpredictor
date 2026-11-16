@@ -1,0 +1,17 @@
+# Exclude Python Streamlit app — Vercel should only build finiq-web (Next.js)
+app/
+backend/
+data/
+.venv/
+requirements.txt
+*.py
+__pycache__/
+
+# Exclude Python test/cache artifacts
+*.pyc
+*.pyo
+
+# Exclude finiq-web's own node_modules and build output (Vercel installs fresh)
+finiq-web/node_modules/
+finiq-web/.next/
+finiq-web/tsconfig.tsbuildinfo

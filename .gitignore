@@ -1,0 +1,44 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data / DB files
+*.db
+*.sqlite
+*.sqlite3
+data/*.csv
+data/*.json
+
+# Node / Next.js (finiq-web handled by its own .gitignore)
+finiq-web/node_modules/
+finiq-web/.next/
+finiq-web/.vercel/
+finiq-web/tsconfig.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*

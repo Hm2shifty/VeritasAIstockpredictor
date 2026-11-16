@@ -1,0 +1,35 @@
+{
+  "name": "finiq-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "deploy": "vercel --prod",
+    "preview": "vercel",
+    "lint": "next lint"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "date-fns": "^4.4.0",
+    "framer-motion": "^14.14.0",
+    "lucide-react": "^1.73.0",
+    "next": "16.4.6",
+    "openai": "^7.57.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recharts": "^3.10.1",
+    "technicalindicators": "^3.1.0",
+    "vercel": "^65.16.0",
+    "yahoo-finance2": "^4.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}
